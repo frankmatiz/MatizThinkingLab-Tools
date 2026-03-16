@@ -887,29 +887,109 @@ function getRecommendation() {
 
 <script>
 (function() {
-  var PASS = 'matiz2025';
-  var SESSION_KEY = 'matiz_access';
-  if (sessionStorage.getItem(SESSION_KEY) === '1') {
+  /* ── Seguridad reforzada ── */
+  var PASS_HASH   = 'a16459f8e87b37883e3f554d63031dad671f0a10ab69fc3f70f6b16b24c7455c';
+  var SESSION_KEY = 'matiz_access_v2';
+  var SESSION_EXP = 'matiz_exp_v2';
+  var ATTEMPTS_K  = 'matiz_attempts';
+  var LOCK_K      = 'matiz_lock';
+  var SESSION_HRS = 8;                       // horas activas
+  var MAX_ATTEMPTS = 3;                      // intentos antes de bloqueo
+  var LOCK_MINS   = 15;                      // minutos de bloqueo
+
+  /* SHA-256 nativo (Web Crypto) */
+  function sha256(msg) {
+    var buf = new TextEncoder().encode(msg);
+    return crypto.subtle.digest('SHA-256', buf).then(function(hashBuf) {
+      return Array.from(new Uint8Array(hashBuf))
+        .map(function(b){ return b.toString(16).padStart(2,'0'); })
+        .join('');
+    });
+  }
+
+  function now() { return Date.now(); }
+
+  /* Verificar sesión activa */
+  function sessionOk() {
+    var token = sessionStorage.getItem(SESSION_KEY);
+    var exp   = sessionStorage.getItem(SESSION_EXP);
+    return token === '1' && exp && now() < parseInt(exp, 10);
+  }
+
+  /* Verificar bloqueo por intentos */
+  function isLocked() {
+    var lockUntil = sessionStorage.getItem(LOCK_K);
+    if (lockUntil && now() < parseInt(lockUntil, 10)) return true;
+    if (lockUntil) {
+      sessionStorage.removeItem(LOCK_K);
+      sessionStorage.removeItem(ATTEMPTS_K);
+    }
+    return false;
+  }
+
+  function getAttempts() { return parseInt(sessionStorage.getItem(ATTEMPTS_K) || '0', 10); }
+
+  function lockout() {
+    var until = now() + LOCK_MINS * 60 * 1000;
+    sessionStorage.setItem(LOCK_K, String(until));
+    sessionStorage.removeItem(ATTEMPTS_K);
+  }
+
+  /* Mostrar error en la pantalla */
+  function showError(msg) {
+    var inp = document.getElementById('gate-input');
+    var err = document.getElementById('gate-error');
+    inp.classList.remove('shake');
+    void inp.offsetWidth;
+    inp.classList.add('shake');
+    err.textContent = msg;
+    inp.value = '';
+    setTimeout(function(){ inp.classList.remove('shake'); }, 400);
+  }
+
+  /* Abrir acceso */
+  function grantAccess() {
+    sessionStorage.setItem(SESSION_KEY, '1');
+    sessionStorage.setItem(SESSION_EXP, String(now() + SESSION_HRS * 3600 * 1000));
+    sessionStorage.removeItem(ATTEMPTS_K);
+    sessionStorage.removeItem(LOCK_K);
     document.getElementById('gate-overlay').style.display = 'none';
   }
+
+  /* Inicializar */
+  if (sessionOk()) {
+    document.getElementById('gate-overlay').style.display = 'none';
+  } else {
+    sessionStorage.removeItem(SESSION_KEY);
+  }
+
   document.getElementById('gate-input').addEventListener('keydown', function(e) {
     if (e.key === 'Enter') checkGate();
   });
+
   window.checkGate = function() {
-    var val = document.getElementById('gate-input').value;
-    if (val === PASS) {
-      sessionStorage.setItem(SESSION_KEY, '1');
-      document.getElementById('gate-overlay').style.display = 'none';
-    } else {
-      var inp = document.getElementById('gate-input');
-      var err = document.getElementById('gate-error');
-      inp.classList.remove('shake');
-      void inp.offsetWidth;
-      inp.classList.add('shake');
-      err.textContent = 'Clave incorrecta. Intenta de nuevo.';
-      inp.value = '';
-      setTimeout(function(){ inp.classList.remove('shake'); }, 400);
+    if (isLocked()) {
+      var lockUntil = parseInt(sessionStorage.getItem(LOCK_K), 10);
+      var mins = Math.ceil((lockUntil - now()) / 60000);
+      showError('Demasiados intentos. Bloqueado ' + mins + ' min más.');
+      return;
     }
+    var val = document.getElementById('gate-input').value.trim();
+    sha256(val).then(function(hash) {
+      if (hash === PASS_HASH) {
+        grantAccess();
+      } else {
+        var attempts = getAttempts() + 1;
+        sessionStorage.setItem(ATTEMPTS_K, String(attempts));
+        var remaining = MAX_ATTEMPTS - attempts;
+        if (remaining <= 0) {
+          lockout();
+          showError('Acceso bloqueado por ' + LOCK_MINS + ' minutos.');
+        } else {
+          showError('Clave incorrecta. Intentos restantes: ' + remaining);
+        }
+      }
+    });
   };
 })();
 </script>
