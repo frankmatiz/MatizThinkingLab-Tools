@@ -43,7 +43,7 @@ Las herramientas individuales están protegidas por clave. La clave se configura
 
 ## Clave actual
 
-`matiz2025` — cámbiala en cada tool antes de publicar en producción.
+`matiz2026` — cámbiala en cada tool antes de publicar en producción.
 
 ## Despliegue
 
@@ -51,4 +51,4 @@ Conectado a Netlify vía GitHub. Cualquier push a `main` despliega automáticame
 
 ---
 
-© 2025 MATIZ – Leadership & Thinking Lab · Todos los derechos reservados
+© 2026 MATIZ – Leadership & Thinking Lab · Todos los derechos reservados
